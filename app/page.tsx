@@ -1,17 +1,79 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { BookOpen, Check, ChevronLeft, ChevronRight, CircleHelp, FileSpreadsheet, Flame, FolderOpen, Menu, RotateCcw, Settings2, Sparkles, Target, Upload, X } from 'lucide-react';
+import {
+  BookOpen,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  CircleHelp,
+  FileSpreadsheet,
+  Flame,
+  FolderOpen,
+  Menu,
+  RotateCcw,
+  Settings2,
+  Sparkles,
+  Target,
+  Upload,
+  X,
+} from 'lucide-react';
 
-type Question = { id: string; type: '单选题' | '多选题' | '判断题'; prompt: string; options: string[]; answer: string[]; explanation: string };
+type Question = {
+  id: string;
+  type: '单选题' | '多选题' | '判断题';
+  prompt: string;
+  options: string[];
+  answer: string[];
+  explanation: string;
+};
 
 const questions: Question[] = [
-  { id: 'q1', type: '单选题', prompt: '党的二十大报告提出，必须更好发挥法治____的保障作用，在法治轨道上全面建设社会主义现代化国家。', options: ['固根本、稳预期、利长远', '促发展、保民生、惠大众', '守底线、提效率、保增长', '谋发展、抓改革、促创新'], answer: ['A'], explanation: '全面依法治国是国家治理的一场深刻革命。法治固根本、稳预期、利长远的保障作用，需要在发展中持续发挥。' },
-  { id: 'q2', type: '多选题', prompt: '下列哪些属于高质量学习计划的关键要素？', options: ['明确的目标', '可执行的时间安排', '复盘与错题整理', '只在考试前集中突击'], answer: ['A', 'B', 'C'], explanation: '清晰目标、可执行的节奏和持续复盘共同构成有效的学习闭环，临时突击难以形成稳定记忆。' },
-  { id: 'q3', type: '判断题', prompt: '错题只需要记录正确答案，不需要记录当时的错误原因。', options: ['正确', '错误'], answer: ['B'], explanation: '错题的价值在于找到错误原因。记录思路、误区和解析，才能在下一次遇到相似问题时真正避免重复犯错。' },
+  {
+    id: 'q1',
+    type: '单选题',
+    prompt:
+      '党的二十大报告提出，必须更好发挥法治____的保障作用，在法治轨道上全面建设社会主义现代化国家。',
+    options: [
+      '固根本、稳预期、利长远',
+      '促发展、保民生、惠大众',
+      '守底线、提效率、保增长',
+      '谋发展、抓改革、促创新',
+    ],
+    answer: ['A'],
+    explanation:
+      '全面依法治国是国家治理的一场深刻革命。法治固根本、稳预期、利长远的保障作用，需要在发展中持续发挥。',
+  },
+  {
+    id: 'q2',
+    type: '多选题',
+    prompt: '下列哪些属于高质量学习计划的关键要素？',
+    options: [
+      '明确的目标',
+      '可执行的时间安排',
+      '复盘与错题整理',
+      '只在考试前集中突击',
+    ],
+    answer: ['A', 'B', 'C'],
+    explanation:
+      '清晰目标、可执行的节奏和持续复盘共同构成有效的学习闭环，临时突击难以形成稳定记忆。',
+  },
+  {
+    id: 'q3',
+    type: '判断题',
+    prompt: '错题只需要记录正确答案，不需要记录当时的错误原因。',
+    options: ['正确', '错误'],
+    answer: ['B'],
+    explanation:
+      '错题的价值在于找到错误原因。记录思路、误区和解析，才能在下一次遇到相似问题时真正避免重复犯错。',
+  },
 ];
 
-const navItems = [{ label: '开始练习', icon: Sparkles }, { label: '题库', icon: BookOpen }, { label: '错题本', icon: RotateCcw }];
+const navItems = [
+  { label: '开始练习', icon: Sparkles },
+  { label: '题库', icon: BookOpen },
+  { label: '错题本', icon: RotateCcw },
+];
 
 export default function Home() {
   const [current, setCurrent] = useState(0);
@@ -24,54 +86,483 @@ export default function Home() {
   const [importMessage, setImportMessage] = useState('');
   const [remembered, setRemembered] = useState(false);
   const [questionList, setQuestionList] = useState(questions);
+  const [wrongQuestions, setWrongQuestions] = useState<
+    { id: string; prompt: string; type: string; category: string }[]
+  >([]);
   const question = questionList[current] ?? questionList[0];
-  const isCorrect = submitted && selected.length === question.answer.length && selected.every((item) => question.answer.includes(item));
+  const isCorrect =
+    submitted &&
+    selected.length === question.answer.length &&
+    selected.every((item) => question.answer.includes(item));
   const answeredCount = current + (submitted ? 1 : 0);
   const progress = Math.round((answeredCount / questionList.length) * 100);
 
-  useEffect(() => { const saved = Number(window.localStorage.getItem('qifa-quiz-current') || 0); if (saved > 0 && saved < questionList.length) { setCurrent(saved); setRemembered(true); } }, [questionList.length]);
-  useEffect(() => { window.localStorage.setItem('qifa-quiz-current', String(current)); }, [current]);
-  useEffect(() => { void fetch('/api/questions').then((response) => response.ok ? response.json() as Promise<Question[]> : []).then((items) => { if (items.length) setQuestionList(items); }).catch(() => undefined); }, []);
+  useEffect(() => {
+    const saved = Number(window.localStorage.getItem('qifa-quiz-current') || 0);
+    if (saved > 0 && saved < questionList.length) {
+      setCurrent(saved);
+      setRemembered(true);
+    }
+  }, [questionList.length]);
+  useEffect(() => {
+    window.localStorage.setItem('qifa-quiz-current', String(current));
+  }, [current]);
+  useEffect(() => {
+    void fetch('/api/questions')
+      .then((response) =>
+        response.ok ? (response.json() as Promise<Question[]>) : [],
+      )
+      .then((items) => {
+        if (items.length) setQuestionList(items);
+      })
+      .catch(() => undefined);
+  }, []);
+  useEffect(() => {
+    if (view === '错题本')
+      void fetch('/api/wrong')
+        .then((response) => (response.ok ? response.json() : []))
+        .then((items) => setWrongQuestions(items))
+        .catch(() => undefined);
+  }, [view]);
 
   function toggleOption(option: string) {
     if (submitted) return;
-    if (question.type !== '多选题') { setSelected([option]); return; }
-    setSelected((items) => items.includes(option) ? items.filter((item) => item !== option) : [...items, option]);
+    if (question.type !== '多选题') {
+      setSelected([option]);
+      return;
+    }
+    setSelected((items) =>
+      items.includes(option)
+        ? items.filter((item) => item !== option)
+        : [...items, option],
+    );
   }
-  function next() { setCurrent((value) => value >= questionList.length - 1 ? 0 : value + 1); setSelected([]); setSubmitted(false); }
+  function next() {
+    setCurrent((value) => (value >= questionList.length - 1 ? 0 : value + 1));
+    setSelected([]);
+    setSubmitted(false);
+  }
 
   async function submit() {
     if (!selected.length) return;
     setSubmitted(true);
-    void fetch('/api/progress', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ questionId: question.id, selected, correct: selected.length === question.answer.length && selected.every((item) => question.answer.includes(item)) }) }).catch(() => undefined);
+    void fetch('/api/progress', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        questionId: question.id,
+        selected,
+        correct:
+          selected.length === question.answer.length &&
+          selected.every((item) => question.answer.includes(item)),
+      }),
+    }).catch(() => undefined);
   }
 
   async function importWorkbook(file: File) {
-    if (!adminPassword) { setImportMessage('请输入题库管理密码'); return; }
-    const login = await fetch('/api/admin/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ password: adminPassword }) });
-    if (!login.ok) { setImportMessage((await login.json() as { error?: string }).error || '管理登录失败'); return; }
-    const form = new FormData(); form.append('file', file);
-    const previewResponse = await fetch('/api/admin/preview', { method: 'POST', body: form });
-    const preview = await previewResponse.json() as { questions?: Question[]; errors?: { row: number; message: string }[]; error?: string };
-    if (!previewResponse.ok || !preview.questions?.length) { setImportMessage(preview.error || preview.errors?.[0]?.message || '没有识别到有效题目'); return; }
-    const bankResponse = await fetch('/api/admin/banks', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: file.name.replace(/\.[^.]+$/, '') || '导入题库', questions: preview.questions }) });
-    if (!bankResponse.ok) { setImportMessage((await bankResponse.json() as { error?: string }).error || '保存题库失败'); return; }
-    setImportMessage(`已导入 ${preview.questions.length} 道题目${preview.errors?.length ? `，${preview.errors.length} 行未导入` : ''}`);
+    if (!adminPassword) {
+      setImportMessage('请输入题库管理密码');
+      return;
+    }
+    const login = await fetch('/api/admin/login', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ password: adminPassword }),
+    });
+    if (!login.ok) {
+      setImportMessage(
+        ((await login.json()) as { error?: string }).error || '管理登录失败',
+      );
+      return;
+    }
+    const form = new FormData();
+    form.append('file', file);
+    const previewResponse = await fetch('/api/admin/preview', {
+      method: 'POST',
+      body: form,
+    });
+    const preview = (await previewResponse.json()) as {
+      questions?: Question[];
+      errors?: { row: number; message: string }[];
+      error?: string;
+    };
+    if (!previewResponse.ok || !preview.questions?.length) {
+      setImportMessage(
+        preview.error || preview.errors?.[0]?.message || '没有识别到有效题目',
+      );
+      return;
+    }
+    const bankResponse = await fetch('/api/admin/banks', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: file.name.replace(/\.[^.]+$/, '') || '导入题库',
+        questions: preview.questions,
+      }),
+    });
+    if (!bankResponse.ok) {
+      setImportMessage(
+        ((await bankResponse.json()) as { error?: string }).error ||
+          '保存题库失败',
+      );
+      return;
+    }
+    setImportMessage(
+      `已导入 ${preview.questions.length} 道题目${preview.errors?.length ? `，${preview.errors.length} 行未导入` : ''}`,
+    );
     setShowImporter(false);
   }
 
-  return <main className="min-h-screen bg-[#f7f9fc] text-slate-900">
-    <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/90 backdrop-blur-xl"><div className="mx-auto flex h-16 max-w-[1440px] items-center justify-between px-4 sm:px-8">
-      <div className="flex items-center gap-3"><button className="rounded-lg p-2 hover:bg-slate-100 lg:hidden" aria-label="打开导航" onClick={() => setMobileNav((value) => !value)}><Menu size={21} /></button><div className="brand-mark"><span>Q</span></div><div><p className="text-[15px] font-bold tracking-tight">Qifa Quiz</p><p className="hidden text-[11px] text-slate-500 sm:block">让每一次练习都留下进步</p></div></div>
-      <div className="hidden items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500 md:flex"><CircleHelp size={15} /> 快捷键：按数字键选择答案</div><button className="flex items-center gap-2 rounded-full border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50"><Settings2 size={16} /><span className="hidden sm:inline">设置</span></button>
-    </div></header>
-    <div className="mx-auto grid max-w-[1440px] lg:grid-cols-[220px_minmax(0,1fr)]">
-      <aside className={`${mobileNav ? 'block' : 'hidden'} border-r border-slate-200 bg-white lg:block`}><div className="sticky top-16 p-4 lg:p-5"><p className="mb-3 px-3 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">学习空间</p><nav className="space-y-1">{navItems.map(({ label, icon: Icon }) => <button key={label} onClick={() => { setView(label); setMobileNav(false); }} className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${view === label ? 'bg-[#eaf2ff] text-[#2161db]' : 'text-slate-600 hover:bg-slate-50'}`}><Icon size={17} />{label}</button>)}</nav><div className="mt-8 border-t border-slate-100 pt-5"><p className="mb-3 px-3 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">我的题库</p><button className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-slate-600 hover:bg-slate-50"><FolderOpen size={17} />理论知识题库</button><button onClick={() => setShowImporter(true)} className="mt-2 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-[#2161db] hover:bg-[#f0f5ff]"><Upload size={17} />导入 Excel 题库</button></div><div className="mt-10 rounded-2xl bg-[#f2f6ff] p-4"><div className="mb-3 flex items-center justify-between"><span className="text-xs font-semibold text-slate-600">本周进度</span><Target size={16} className="text-[#2161db]" /></div><div className="mb-2 h-1.5 overflow-hidden rounded-full bg-white"><div className="h-full rounded-full bg-[#2161db]" style={{ width: `${progress}%` }} /></div><p className="text-xs text-slate-500">已完成 {answeredCount} / {questions.length} 道题</p></div></div></aside>
-      <section className="min-w-0 px-4 py-6 sm:px-8 lg:px-12 lg:py-10"><div className="mx-auto max-w-5xl"><div className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><p className="mb-2 text-sm font-semibold text-[#2161db]">理论知识题库 · 进行中</p><h1 className="text-2xl font-bold tracking-tight sm:text-3xl">继续你的练习</h1><p className="mt-2 text-sm text-slate-500">记住上次刷到的位置，今天从第 {current + 1} 题开始。</p></div><div className="flex items-center gap-2 text-sm text-slate-500"><Flame size={17} className="text-orange-500" />连续学习 3 天</div></div>
-        {remembered && <div className="mb-5 flex items-center justify-between rounded-xl border border-[#dbe8ff] bg-[#f0f5ff] px-4 py-3 text-sm text-[#2161db]"><span>已恢复你上次的练习进度：第 {current + 1} 题</span><button onClick={() => { setCurrent(0); setRemembered(false); }} className="font-semibold hover:underline">从头开始</button></div>}
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_250px]"><div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-[0_12px_35px_rgba(31,63,114,0.06)] sm:p-8"><div className="mb-7 flex items-center justify-between"><div className="flex items-center gap-2"><span className="rounded-full bg-[#eaf2ff] px-3 py-1.5 text-xs font-bold text-[#2161db]">{question.type}</span><span className="text-xs text-slate-400">第 {current + 1} / {questionList.length} 题</span></div><span className="text-xs font-semibold text-slate-400">{progress}% 完成</span></div><div className="mb-7 h-1.5 rounded-full bg-slate-100"><div className="h-full rounded-full bg-[#2161db] transition-all" style={{ width: `${Math.max(10, progress)}%` }} /></div><h2 className="max-w-3xl text-xl font-semibold leading-relaxed tracking-tight sm:text-2xl">{question.prompt}</h2><p className="mb-5 mt-3 text-sm text-slate-400">{question.type === '多选题' ? '请选择所有正确答案' : '请选择一个答案'}</p><div className="space-y-3">{question.options.map((option, index) => { const letter = String.fromCharCode(65 + index); const active = selected.includes(letter); const correct = submitted && question.answer.includes(letter); return <button key={letter} onClick={() => toggleOption(letter)} className={`flex w-full items-start gap-3 rounded-2xl border p-4 text-left transition ${correct ? 'border-emerald-300 bg-emerald-50' : active ? 'border-[#2161db] bg-[#f0f5ff] shadow-sm' : 'border-slate-200 hover:border-[#9bbcff] hover:bg-slate-50'}`}><span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-sm font-bold ${correct ? 'bg-emerald-500 text-white' : active ? 'bg-[#2161db] text-white' : 'bg-slate-100 text-slate-500'}`}>{correct ? <Check size={16} /> : letter}</span><span className="pt-0.5 text-[15px] leading-6">{option}</span></button>; })}</div>{submitted && <div className={`mt-6 rounded-2xl border p-4 ${isCorrect ? 'border-emerald-200 bg-emerald-50' : 'border-orange-200 bg-orange-50'}`}><div className="flex items-center gap-2 font-semibold">{isCorrect ? <><Check size={18} className="text-emerald-600" />回答正确</> : <><X size={18} className="text-orange-600" />再想一想</>}<span className="text-sm font-normal text-slate-600">正确答案：{question.answer.join('、')}</span></div><p className="mt-2 text-sm leading-6 text-slate-600">{question.explanation}</p></div>}<div className="mt-8 flex items-center justify-between gap-3"><button onClick={() => { setCurrent(Math.max(0, current - 1)); setSelected([]); setSubmitted(false); }} disabled={current === 0} className="flex items-center gap-1 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-500 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"><ChevronLeft size={17} />上一题</button>{submitted ? <button onClick={next} className="flex items-center gap-2 rounded-xl bg-[#2161db] px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-blue-200 hover:bg-[#1853c4]">下一题<ChevronRight size={17} /></button> : <button onClick={() => void submit()} disabled={!selected.length} className="rounded-xl bg-[#2161db] px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-blue-200 hover:bg-[#1853c4] disabled:cursor-not-allowed disabled:opacity-40">提交答案</button>}</div></div>
-          <aside className="space-y-4"><div className="rounded-3xl border border-slate-200 bg-white p-5"><div className="mb-4 flex items-center gap-2"><BookOpen size={17} className="text-[#2161db]" /><h3 className="font-semibold">题库概览</h3></div><div className="grid grid-cols-2 gap-3"><div className="rounded-2xl bg-slate-50 p-3"><p className="text-xl font-bold">{questionList.length}</p><p className="mt-1 text-xs text-slate-500">总题数</p></div><div className="rounded-2xl bg-slate-50 p-3"><p className="text-xl font-bold">{isCorrect ? '100%' : '76%'}</p><p className="mt-1 text-xs text-slate-500">正确率</p></div></div><div className="mt-4 flex items-center justify-between text-xs text-slate-500"><span>已掌握 {answeredCount} 题</span><span>待复习 {Math.max(0, questionList.length - answeredCount)} 题</span></div></div><div className="rounded-3xl border border-[#dbe8ff] bg-[#f0f5ff] p-5"><div className="mb-2 flex items-center gap-2 text-[#2161db]"><Sparkles size={17} /><h3 className="font-semibold">学习提醒</h3></div><p className="text-sm leading-6 text-slate-600">每天完成 10 道题，连续练习比一次刷完更容易记住。</p></div></aside></div>
-      </div></section></div>
-    {showImporter && <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/30 p-4"><dialog open className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl"><div className="mb-5 flex items-start justify-between"><div><h2 className="text-lg font-bold">导入 Excel 题库</h2><p className="mt-1 text-sm text-slate-500">支持 .xlsx 文件，导入后立即开始练习。</p></div><button onClick={() => setShowImporter(false)} className="rounded-lg p-2 hover:bg-slate-100" aria-label="关闭"><X size={18} /></button></div><input type="password" value={adminPassword} onChange={(event) => setAdminPassword(event.target.value)} placeholder="题库管理密码" className="mb-3 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#2161db]" /><label className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[#b9d0ff] bg-[#f6f9ff] px-5 py-10 text-center hover:bg-[#f0f5ff]"><FileSpreadsheet size={30} className="mb-3 text-[#2161db]" /><span className="text-sm font-semibold text-slate-700">点击选择 Excel 文件</span><span className="mt-1 text-xs text-slate-400">或将文件拖拽到这里</span><input type="file" accept=".xlsx" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importWorkbook(file); }} /></label>{importMessage && <p className="mt-3 rounded-xl bg-amber-50 p-3 text-xs text-amber-700">{importMessage}</p>}<div className="mt-4 rounded-xl bg-slate-50 p-3 text-xs leading-5 text-slate-500">建议列：题目、题型、选项、答案、解析、分类。<a className="ml-1 font-semibold text-[#2161db]" href="/api/template">下载模板</a></div></dialog></div>}
-  </main>;
+  return (
+    <main className="min-h-screen bg-[#f7f9fc] text-slate-900">
+      <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/90 backdrop-blur-xl">
+        <div className="mx-auto flex h-16 max-w-[1440px] items-center justify-between px-4 sm:px-8">
+          <div className="flex items-center gap-3">
+            <button
+              className="rounded-lg p-2 hover:bg-slate-100 lg:hidden"
+              aria-label="打开导航"
+              onClick={() => setMobileNav((value) => !value)}
+            >
+              <Menu size={21} />
+            </button>
+            <div className="brand-mark">
+              <span>Q</span>
+            </div>
+            <div>
+              <p className="text-[15px] font-bold tracking-tight">Qifa Quiz</p>
+              <p className="hidden text-[11px] text-slate-500 sm:block">
+                让每一次练习都留下进步
+              </p>
+            </div>
+          </div>
+          <div className="hidden items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500 md:flex">
+            <CircleHelp size={15} /> 快捷键：按数字键选择答案
+          </div>
+          <button
+            onClick={() => {
+              setImportMessage('设置入口已打开');
+              setShowImporter(true);
+            }}
+            className="flex items-center gap-2 rounded-full border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50"
+          >
+            <Settings2 size={16} />
+            <span className="hidden sm:inline">设置</span>
+          </button>
+        </div>
+      </header>
+      <div className="mx-auto grid max-w-[1440px] lg:grid-cols-[220px_minmax(0,1fr)]">
+        <aside
+          className={`${mobileNav ? 'block' : 'hidden'} border-r border-slate-200 bg-white lg:block`}
+        >
+          <div className="sticky top-16 p-4 lg:p-5">
+            <p className="mb-3 px-3 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">
+              学习空间
+            </p>
+            <nav className="space-y-1">
+              {navItems.map(({ label, icon: Icon }) => (
+                <button
+                  key={label}
+                  onClick={() => {
+                    setView(label);
+                    setMobileNav(false);
+                  }}
+                  className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${view === label ? 'bg-[#eaf2ff] text-[#2161db]' : 'text-slate-600 hover:bg-slate-50'}`}
+                >
+                  <Icon size={17} />
+                  {label}
+                </button>
+              ))}
+            </nav>
+            <div className="mt-8 border-t border-slate-100 pt-5">
+              <p className="mb-3 px-3 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                我的题库
+              </p>
+              <button onClick={() => { setView('开始练习'); setMobileNav(false); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-slate-600 hover:bg-slate-50">
+                <FolderOpen size={17} />
+                理论知识题库
+              </button>
+              <button
+                onClick={() => { setImportMessage(''); setShowImporter(true); }}
+                className="mt-2 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-[#2161db] hover:bg-[#f0f5ff]"
+              >
+                <Upload size={17} />
+                导入 Excel 题库
+              </button>
+            </div>
+            <div className="mt-10 rounded-2xl bg-[#f2f6ff] p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <span className="text-xs font-semibold text-slate-600">
+                  本周进度
+                </span>
+                <Target size={16} className="text-[#2161db]" />
+              </div>
+              <div className="mb-2 h-1.5 overflow-hidden rounded-full bg-white">
+                <div
+                  className="h-full rounded-full bg-[#2161db]"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+              <p className="text-xs text-slate-500">
+                已完成 {answeredCount} / {questions.length} 道题
+              </p>
+            </div>
+          </div>
+        </aside>
+        <section className="min-w-0 px-4 py-6 sm:px-8 lg:px-12 lg:py-10">
+          <div className="mx-auto max-w-5xl">
+            <div className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+              <div>
+                <p className="mb-2 text-sm font-semibold text-[#2161db]">
+                  理论知识题库 · {view}
+                </p>
+                <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+                  {view === '错题本' ? '复习你的错题' : view === '题库' ? '我的题库' : '继续你的练习'}
+                </h1>
+                <p className="mt-2 text-sm text-slate-500">
+                  {view === '错题本' ? `当前有 ${wrongQuestions.length} 道待复习题目。` : view === '题库' ? '选择题库后即可开始顺序或随机练习。' : `记住上次刷到的位置，今天从第 ${current + 1} 题开始。`}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-slate-500">
+                <Flame size={17} className="text-orange-500" />
+                连续学习 3 天
+              </div>
+            </div>
+            {view === '错题本' && (
+              <div className="mb-6 rounded-2xl border border-orange-100 bg-orange-50 p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <p className="font-semibold text-orange-800">需要复习的题目</p>
+                  <button onClick={() => setView('开始练习')} className="rounded-lg bg-white px-3 py-2 text-sm font-semibold text-orange-700 shadow-sm hover:bg-orange-100">返回刷题</button>
+                </div>
+                {wrongQuestions.length ? <div className="space-y-2">{wrongQuestions.slice(0, 8).map((item, index) => <button key={item.id} onClick={() => { const position = questionList.findIndex((questionItem) => questionItem.id === item.id); if (position >= 0) { setCurrent(position); setView('开始练习'); setSelected([]); setSubmitted(false); } }} className="block w-full rounded-xl bg-white p-3 text-left text-sm text-slate-700 hover:bg-orange-100"><span className="mr-2 font-semibold text-orange-600">{index + 1}.</span>{item.prompt}</button>)}</div> : <p className="text-sm text-orange-700">还没有错题，先完成几道练习吧。</p>}
+              </div>
+            )}
+            {remembered && (
+              <div className="mb-5 flex items-center justify-between rounded-xl border border-[#dbe8ff] bg-[#f0f5ff] px-4 py-3 text-sm text-[#2161db]">
+                <span>已恢复你上次的练习进度：第 {current + 1} 题</span>
+                <button
+                  onClick={() => {
+                    setCurrent(0);
+                    setRemembered(false);
+                  }}
+                  className="font-semibold hover:underline"
+                >
+                  从头开始
+                </button>
+              </div>
+            )}
+            <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_250px]">
+              <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-[0_12px_35px_rgba(31,63,114,0.06)] sm:p-8">
+                <div className="mb-7 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-full bg-[#eaf2ff] px-3 py-1.5 text-xs font-bold text-[#2161db]">
+                      {question.type}
+                    </span>
+                    <span className="text-xs text-slate-400">
+                      第 {current + 1} / {questionList.length} 题
+                    </span>
+                  </div>
+                  <span className="text-xs font-semibold text-slate-400">
+                    {progress}% 完成
+                  </span>
+                </div>
+                <div className="mb-7 h-1.5 rounded-full bg-slate-100">
+                  <div
+                    className="h-full rounded-full bg-[#2161db] transition-all"
+                    style={{ width: `${Math.max(10, progress)}%` }}
+                  />
+                </div>
+                <h2 className="max-w-3xl text-xl font-semibold leading-relaxed tracking-tight sm:text-2xl">
+                  {question.prompt}
+                </h2>
+                <p className="mb-5 mt-3 text-sm text-slate-400">
+                  {question.type === '多选题'
+                    ? '请选择所有正确答案'
+                    : '请选择一个答案'}
+                </p>
+                <div className="space-y-3">
+                  {question.options.map((option, index) => {
+                    const letter = String.fromCharCode(65 + index);
+                    const active = selected.includes(letter);
+                    const correct =
+                      submitted && question.answer.includes(letter);
+                    return (
+                      <button
+                        key={letter}
+                        onClick={() => toggleOption(letter)}
+                        className={`flex w-full items-start gap-3 rounded-2xl border p-4 text-left transition ${correct ? 'border-emerald-300 bg-emerald-50' : active ? 'border-[#2161db] bg-[#f0f5ff] shadow-sm' : 'border-slate-200 hover:border-[#9bbcff] hover:bg-slate-50'}`}
+                      >
+                        <span
+                          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-sm font-bold ${correct ? 'bg-emerald-500 text-white' : active ? 'bg-[#2161db] text-white' : 'bg-slate-100 text-slate-500'}`}
+                        >
+                          {correct ? <Check size={16} /> : letter}
+                        </span>
+                        <span className="pt-0.5 text-[15px] leading-6">
+                          {option}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {submitted && (
+                  <div
+                    className={`mt-6 rounded-2xl border p-4 ${isCorrect ? 'border-emerald-200 bg-emerald-50' : 'border-orange-200 bg-orange-50'}`}
+                  >
+                    <div className="flex items-center gap-2 font-semibold">
+                      {isCorrect ? (
+                        <>
+                          <Check size={18} className="text-emerald-600" />
+                          回答正确
+                        </>
+                      ) : (
+                        <>
+                          <X size={18} className="text-orange-600" />
+                          再想一想
+                        </>
+                      )}
+                      <span className="text-sm font-normal text-slate-600">
+                        正确答案：{question.answer.join('、')}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">
+                      {question.explanation}
+                    </p>
+                  </div>
+                )}
+                <div className="mt-8 flex items-center justify-between gap-3">
+                  <button
+                    onClick={() => {
+                      setCurrent(Math.max(0, current - 1));
+                      setSelected([]);
+                      setSubmitted(false);
+                    }}
+                    disabled={current === 0}
+                    className="flex items-center gap-1 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-500 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <ChevronLeft size={17} />
+                    上一题
+                  </button>
+                  {submitted ? (
+                    <button
+                      onClick={next}
+                      className="flex items-center gap-2 rounded-xl bg-[#2161db] px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-blue-200 hover:bg-[#1853c4]"
+                    >
+                      下一题
+                      <ChevronRight size={17} />
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => void submit()}
+                      disabled={!selected.length}
+                      className="rounded-xl bg-[#2161db] px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-blue-200 hover:bg-[#1853c4] disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      提交答案
+                    </button>
+                  )}
+                </div>
+              </div>
+              <aside className="space-y-4">
+                <div className="rounded-3xl border border-slate-200 bg-white p-5">
+                  <div className="mb-4 flex items-center gap-2">
+                    <BookOpen size={17} className="text-[#2161db]" />
+                    <h3 className="font-semibold">题库概览</h3>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-2xl bg-slate-50 p-3">
+                      <p className="text-xl font-bold">{questionList.length}</p>
+                      <p className="mt-1 text-xs text-slate-500">总题数</p>
+                    </div>
+                    <div className="rounded-2xl bg-slate-50 p-3">
+                      <p className="text-xl font-bold">
+                        {isCorrect ? '100%' : '76%'}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-500">正确率</p>
+                    </div>
+                  </div>
+                  <div className="mt-4 flex items-center justify-between text-xs text-slate-500">
+                    <span>已掌握 {answeredCount} 题</span>
+                    <span>
+                      待复习 {Math.max(0, questionList.length - answeredCount)}{' '}
+                      题
+                    </span>
+                  </div>
+                </div>
+                <div className="rounded-3xl border border-[#dbe8ff] bg-[#f0f5ff] p-5">
+                  <div className="mb-2 flex items-center gap-2 text-[#2161db]">
+                    <Sparkles size={17} />
+                    <h3 className="font-semibold">学习提醒</h3>
+                  </div>
+                  <p className="text-sm leading-6 text-slate-600">
+                    每天完成 10 道题，连续练习比一次刷完更容易记住。
+                  </p>
+                </div>
+              </aside>
+            </div>
+          </div>
+        </section>
+      </div>
+      {showImporter && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/30 p-4">
+          <dialog
+            open
+            className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl"
+          >
+            <div className="mb-5 flex items-start justify-between">
+              <div>
+                <h2 className="text-lg font-bold">导入 Excel 题库</h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  支持 .xlsx 文件，导入后立即开始练习。
+                </p>
+              </div>
+              <button
+                onClick={() => setShowImporter(false)}
+                className="rounded-lg p-2 hover:bg-slate-100"
+                aria-label="关闭"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <input
+              type="password"
+              value={adminPassword}
+              onChange={(event) => setAdminPassword(event.target.value)}
+              placeholder="题库管理密码"
+              className="mb-3 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#2161db]"
+            />
+            <label className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[#b9d0ff] bg-[#f6f9ff] px-5 py-10 text-center hover:bg-[#f0f5ff]">
+              <FileSpreadsheet size={30} className="mb-3 text-[#2161db]" />
+              <span className="text-sm font-semibold text-slate-700">
+                点击选择 Excel 文件
+              </span>
+              <span className="mt-1 text-xs text-slate-400">
+                或将文件拖拽到这里
+              </span>
+              <input
+                type="file"
+                accept=".xlsx"
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) void importWorkbook(file);
+                }}
+              />
+            </label>
+            {importMessage && (
+              <p className="mt-3 rounded-xl bg-amber-50 p-3 text-xs text-amber-700">
+                {importMessage}
+              </p>
+            )}
+            <div className="mt-4 rounded-xl bg-slate-50 p-3 text-xs leading-5 text-slate-500">
+              建议列：题目、题型、选项、答案、解析、分类。
+              <a
+                className="ml-1 font-semibold text-[#2161db]"
+                href="/api/template"
+              >
+                下载模板
+              </a>
+            </div>
+          </dialog>
+        </div>
+      )}
+    </main>
+  );
 }
