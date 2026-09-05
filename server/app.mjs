@@ -69,12 +69,6 @@ export function createApp({
       supplied.length === expected.length && timingSafeEqual(supplied, expected)
     );
   };
-  const accessFromRequest = (req) =>
-    req.query?.token ||
-    req.headers['x-access-token'] ||
-    req.headers.cookie?.match(
-      new RegExp(`(?:^|;\\s*)${accessCookie}=([^;]+)`),
-    )?.[1];
   const grantAccess = (req, res) => {
     const cookie = req.headers.cookie?.match(
       new RegExp(`(?:^|;\\s*)${accessCookie}=([^;]+)`),
@@ -547,11 +541,9 @@ export function createApp({
     const status =
       error.status || (error instanceof multer.MulterError ? 400 : 500);
     if (status === 500) console.error(error.message);
-    res
-      .status(status)
-      .json({
-        error: status === 500 ? '服务暂时不可用，请稍后重试' : error.message,
-      });
+    res.status(status).json({
+      error: status === 500 ? '服务暂时不可用，请稍后重试' : error.message,
+    });
   });
   return { app, db };
 }
