@@ -82,6 +82,11 @@ export default function Home() {
   const [selected, setSelected] = useState<string[]>([]);
   const [submitted, setSubmitted] = useState(false);
   const [view, setView] = useState('开始练习');
+  const [accessState, setAccessState] = useState<
+    'checking' | 'granted' | 'denied'
+  >('checking');
+  const [accessInput, setAccessInput] = useState('');
+  const [accessMessage, setAccessMessage] = useState('');
   const [query, setQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState('全部题型');
   const [mobileNav, setMobileNav] = useState(false);
@@ -110,6 +115,43 @@ export default function Home() {
   const answeredCount = current + (submitted ? 1 : 0);
   const progress = Math.round((answeredCount / questionList.length) * 100);
 
+  async function enterPlatform(token: string) {
+    setAccessMessage('');
+    const response = await fetch(
+      `/api/access?token=${encodeURIComponent(token)}`,
+      { credentials: 'include' },
+    );
+    if (!response.ok) {
+      setAccessState('denied');
+      setAccessMessage('token 不正确或已失效');
+      return false;
+    }
+    setAccessState('granted');
+    const cleanUrl = new URL(window.location.href);
+    cleanUrl.searchParams.delete('token');
+    window.history.replaceState(
+      {},
+      '',
+      `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`,
+    );
+    return true;
+  }
+
+  useEffect(() => {
+    const token = new URL(window.location.href).searchParams.get('token');
+    const request = token
+      ? enterPlatform(token)
+      : fetch('/api/access', { credentials: 'include' }).then((response) => {
+          if (!response.ok) throw new Error('unauthorized');
+          setAccessState('granted');
+          return true;
+        });
+    void request.catch(() => {
+      setAccessState('denied');
+      setAccessMessage('请输入访问 token');
+    });
+  }, []);
+
   useEffect(() => {
     const saved = Number(window.localStorage.getItem('qifa-quiz-current') || 0);
     if (saved > 0 && saved < questionList.length) {
@@ -129,9 +171,9 @@ export default function Home() {
         if (items.length) setQuestionList(items);
       })
       .catch(() => undefined);
-  }, [view]);
+  }, [view, accessState]);
   useEffect(() => {
-    if (view === '错题本')
+    if (accessState === 'granted' && view === '错题本')
       void fetch('/api/wrong')
         .then((response) => (response.ok ? response.json() : []))
         .then((items) =>
@@ -145,7 +187,7 @@ export default function Home() {
           ),
         )
         .catch(() => undefined);
-  }, [view]);
+  }, [view, accessState]);
 
   function toggleOption(option: string) {
     if (submitted) return;
@@ -233,6 +275,57 @@ export default function Home() {
       `已导入 ${preview.questions.length} 道题目${preview.errors?.length ? `，${preview.errors.length} 行未导入` : ''}`,
     );
     setShowImporter(false);
+  }
+
+  if (accessState !== 'granted') {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-[#f7f9fc] px-4 text-slate-900">
+        <section className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-8 shadow-[0_18px_50px_rgba(31,63,114,0.1)]">
+          <div className="mb-6 flex items-center gap-3">
+            <div className="brand-mark">
+              <span>Q</span>
+            </div>
+            <div>
+              <p className="font-bold">Qifa Quiz</p>
+              <p className="text-xs text-slate-500">访问验证</p>
+            </div>
+          </div>
+          <h1 className="text-2xl font-bold tracking-tight">
+            请输入访问 token
+          </h1>
+          <p className="mt-2 text-sm leading-6 text-slate-500">
+            该平台仅对持有访问链接的用户开放。
+          </p>
+          <form
+            className="mt-6 space-y-3"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void enterPlatform(accessInput);
+            }}
+          >
+            <input
+              autoFocus
+              type="password"
+              value={accessInput}
+              onChange={(event) => setAccessInput(event.target.value)}
+              placeholder="访问 token"
+              className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[#2161db] focus:ring-2 focus:ring-blue-100"
+            />
+            <button
+              type="submit"
+              className="w-full rounded-xl bg-[#2161db] px-4 py-3 text-sm font-semibold text-white hover:bg-[#1853c4]"
+            >
+              进入平台
+            </button>
+          </form>
+          {accessMessage && (
+            <p className="mt-3 rounded-xl bg-rose-50 p-3 text-sm text-rose-700">
+              {accessMessage}
+            </p>
+          )}
+        </section>
+      </main>
+    );
   }
 
   return (
