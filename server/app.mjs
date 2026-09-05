@@ -26,6 +26,7 @@ export function createApp({ dbPath = process.env.DATABASE_PATH || './data/quiz.s
     CREATE INDEX IF NOT EXISTS practice_user ON practice(user_id, updated);`);
   const app = express();
   app.disable('x-powered-by');
+  app.set('trust proxy', 1);
   const run = (sql, ...args) => db.prepare(sql).run(...args);
   const one = (sql, ...args) => db.prepare(sql).get(...args);
   const all = (sql, ...args) => db.prepare(sql).all(...args);
