@@ -26,6 +26,7 @@ type Question = {
   options: string[];
   answer: string[];
   explanation: string;
+  category?: string;
 };
 
 const questions: Question[] = [
@@ -277,12 +278,21 @@ export default function Home() {
               <p className="mb-3 px-3 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">
                 我的题库
               </p>
-              <button onClick={() => { setView('开始练习'); setMobileNav(false); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-slate-600 hover:bg-slate-50">
+              <button
+                onClick={() => {
+                  setView('开始练习');
+                  setMobileNav(false);
+                }}
+                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-slate-600 hover:bg-slate-50"
+              >
                 <FolderOpen size={17} />
                 理论知识题库
               </button>
               <button
-                onClick={() => { setImportMessage(''); setShowImporter(true); }}
+                onClick={() => {
+                  setImportMessage('');
+                  setShowImporter(true);
+                }}
                 className="mt-2 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-[#2161db] hover:bg-[#f0f5ff]"
               >
                 <Upload size={17} />
@@ -316,10 +326,18 @@ export default function Home() {
                   理论知识题库 · {view}
                 </p>
                 <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-                  {view === '错题本' ? '复习你的错题' : view === '题库' ? '我的题库' : '继续你的练习'}
+                  {view === '错题本'
+                    ? '复习你的错题'
+                    : view === '题库'
+                      ? '我的题库'
+                      : '继续你的练习'}
                 </h1>
                 <p className="mt-2 text-sm text-slate-500">
-                  {view === '错题本' ? `当前有 ${wrongQuestions.length} 道待复习题目。` : view === '题库' ? '选择题库后即可开始顺序或随机练习。' : `记住上次刷到的位置，今天从第 ${current + 1} 题开始。`}
+                  {view === '错题本'
+                    ? `当前有 ${wrongQuestions.length} 道待复习题目。`
+                    : view === '题库'
+                      ? '选择题库后即可开始顺序或随机练习。'
+                      : `记住上次刷到的位置，今天从第 ${current + 1} 题开始。`}
                 </p>
               </div>
               <div className="flex items-center gap-2 text-sm text-slate-500">
@@ -330,10 +348,46 @@ export default function Home() {
             {view === '错题本' && (
               <div className="mb-6 rounded-2xl border border-orange-100 bg-orange-50 p-4">
                 <div className="mb-3 flex items-center justify-between">
-                  <p className="font-semibold text-orange-800">需要复习的题目</p>
-                  <button onClick={() => setView('开始练习')} className="rounded-lg bg-white px-3 py-2 text-sm font-semibold text-orange-700 shadow-sm hover:bg-orange-100">返回刷题</button>
+                  <p className="font-semibold text-orange-800">
+                    需要复习的题目
+                  </p>
+                  <button
+                    onClick={() => setView('开始练习')}
+                    className="rounded-lg bg-white px-3 py-2 text-sm font-semibold text-orange-700 shadow-sm hover:bg-orange-100"
+                  >
+                    返回刷题
+                  </button>
                 </div>
-                {wrongQuestions.length ? <div className="space-y-2">{wrongQuestions.slice(0, 8).map((item, index) => <button key={item.id} onClick={() => { const position = questionList.findIndex((questionItem) => questionItem.id === item.id); if (position >= 0) { setCurrent(position); setView('开始练习'); setSelected([]); setSubmitted(false); } }} className="block w-full rounded-xl bg-white p-3 text-left text-sm text-slate-700 hover:bg-orange-100"><span className="mr-2 font-semibold text-orange-600">{index + 1}.</span>{item.prompt}</button>)}</div> : <p className="text-sm text-orange-700">还没有错题，先完成几道练习吧。</p>}
+                {wrongQuestions.length ? (
+                  <div className="space-y-2">
+                    {wrongQuestions.slice(0, 8).map((item, index) => (
+                      <button
+                        key={item.id}
+                        onClick={() => {
+                          const position = questionList.findIndex(
+                            (questionItem) => questionItem.id === item.id,
+                          );
+                          if (position >= 0) {
+                            setCurrent(position);
+                            setView('开始练习');
+                            setSelected([]);
+                            setSubmitted(false);
+                          }
+                        }}
+                        className="block w-full rounded-xl bg-white p-3 text-left text-sm text-slate-700 hover:bg-orange-100"
+                      >
+                        <span className="mr-2 font-semibold text-orange-600">
+                          {index + 1}.
+                        </span>
+                        {item.prompt}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-orange-700">
+                    还没有错题，先完成几道练习吧。
+                  </p>
+                )}
               </div>
             )}
             {remembered && (
@@ -350,153 +404,218 @@ export default function Home() {
                 </button>
               </div>
             )}
-            <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_250px]">
+            {view === '题库' ? (
               <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-[0_12px_35px_rgba(31,63,114,0.06)] sm:p-8">
-                <div className="mb-7 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="rounded-full bg-[#eaf2ff] px-3 py-1.5 text-xs font-bold text-[#2161db]">
-                      {question.type}
-                    </span>
-                    <span className="text-xs text-slate-400">
-                      第 {current + 1} / {questionList.length} 题
-                    </span>
-                  </div>
-                  <span className="text-xs font-semibold text-slate-400">
-                    {progress}% 完成
-                  </span>
-                </div>
-                <div className="mb-7 h-1.5 rounded-full bg-slate-100">
-                  <div
-                    className="h-full rounded-full bg-[#2161db] transition-all"
-                    style={{ width: `${Math.max(10, progress)}%` }}
-                  />
-                </div>
-                <h2 className="max-w-3xl text-xl font-semibold leading-relaxed tracking-tight sm:text-2xl">
-                  {question.prompt}
-                </h2>
-                <p className="mb-5 mt-3 text-sm text-slate-400">
-                  {question.type === '多选题'
-                    ? '请选择所有正确答案'
-                    : '请选择一个答案'}
-                </p>
-                <div className="space-y-3">
-                  {question.options.map((option, index) => {
-                    const letter = String.fromCharCode(65 + index);
-                    const active = selected.includes(letter);
-                    const correct =
-                      submitted && question.answer.includes(letter);
-                    return (
-                      <button
-                        key={letter}
-                        onClick={() => toggleOption(letter)}
-                        className={`flex w-full items-start gap-3 rounded-2xl border p-4 text-left transition ${correct ? 'border-emerald-300 bg-emerald-50' : active ? 'border-[#2161db] bg-[#f0f5ff] shadow-sm' : 'border-slate-200 hover:border-[#9bbcff] hover:bg-slate-50'}`}
-                      >
-                        <span
-                          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-sm font-bold ${correct ? 'bg-emerald-500 text-white' : active ? 'bg-[#2161db] text-white' : 'bg-slate-100 text-slate-500'}`}
-                        >
-                          {correct ? <Check size={16} /> : letter}
-                        </span>
-                        <span className="pt-0.5 text-[15px] leading-6">
-                          {option}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-                {submitted && (
-                  <div
-                    className={`mt-6 rounded-2xl border p-4 ${isCorrect ? 'border-emerald-200 bg-emerald-50' : 'border-orange-200 bg-orange-50'}`}
-                  >
-                    <div className="flex items-center gap-2 font-semibold">
-                      {isCorrect ? (
-                        <>
-                          <Check size={18} className="text-emerald-600" />
-                          回答正确
-                        </>
-                      ) : (
-                        <>
-                          <X size={18} className="text-orange-600" />
-                          再想一想
-                        </>
-                      )}
-                      <span className="text-sm font-normal text-slate-600">
-                        正确答案：{question.answer.join('、')}
-                      </span>
-                    </div>
-                    <p className="mt-2 text-sm leading-6 text-slate-600">
-                      {question.explanation}
+                <div className="mb-5 flex items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-lg font-semibold text-slate-900">
+                      全部题目
+                    </h2>
+                    <p className="mt-1 text-sm text-slate-500">
+                      共 {questionList.length} 道题，点击题目即可开始练习。
                     </p>
                   </div>
-                )}
-                <div className="mt-8 flex items-center justify-between gap-3">
                   <button
                     onClick={() => {
-                      setCurrent(Math.max(0, current - 1));
+                      setView('开始练习');
+                      setCurrent(0);
                       setSelected([]);
                       setSubmitted(false);
                     }}
-                    disabled={current === 0}
-                    className="flex items-center gap-1 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-500 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="rounded-xl bg-[#2161db] px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-100 hover:bg-[#1853c4]"
                   >
-                    <ChevronLeft size={17} />
-                    上一题
+                    开始刷题
                   </button>
-                  {submitted ? (
+                </div>
+                <div className="divide-y divide-slate-100 rounded-2xl border border-slate-100">
+                  {questionList.map((item, index) => (
                     <button
-                      onClick={next}
-                      className="flex items-center gap-2 rounded-xl bg-[#2161db] px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-blue-200 hover:bg-[#1853c4]"
+                      key={item.id}
+                      onClick={() => {
+                        setCurrent(index);
+                        setView('开始练习');
+                        setSelected([]);
+                        setSubmitted(false);
+                      }}
+                      className="flex w-full items-start gap-4 p-4 text-left transition hover:bg-slate-50 sm:p-5"
                     >
-                      下一题
-                      <ChevronRight size={17} />
+                      <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#eaf2ff] text-sm font-bold text-[#2161db]">
+                        {index + 1}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="mb-1 flex flex-wrap items-center gap-2">
+                          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
+                            {item.type}
+                          </span>
+                          {item.category && (
+                            <span className="text-xs text-slate-400">
+                              {item.category}
+                            </span>
+                          )}
+                        </span>
+                        <span className="block text-[15px] leading-6 text-slate-800">
+                          {item.prompt}
+                        </span>
+                      </span>
+                      <ChevronRight
+                        size={18}
+                        className="mt-2 shrink-0 text-slate-300"
+                      />
                     </button>
-                  ) : (
-                    <button
-                      onClick={() => void submit()}
-                      disabled={!selected.length}
-                      className="rounded-xl bg-[#2161db] px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-blue-200 hover:bg-[#1853c4] disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      提交答案
-                    </button>
-                  )}
+                  ))}
                 </div>
               </div>
-              <aside className="space-y-4">
-                <div className="rounded-3xl border border-slate-200 bg-white p-5">
-                  <div className="mb-4 flex items-center gap-2">
-                    <BookOpen size={17} className="text-[#2161db]" />
-                    <h3 className="font-semibold">题库概览</h3>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="rounded-2xl bg-slate-50 p-3">
-                      <p className="text-xl font-bold">{questionList.length}</p>
-                      <p className="mt-1 text-xs text-slate-500">总题数</p>
+            ) : (
+              <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_250px]">
+                <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-[0_12px_35px_rgba(31,63,114,0.06)] sm:p-8">
+                  <div className="mb-7 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="rounded-full bg-[#eaf2ff] px-3 py-1.5 text-xs font-bold text-[#2161db]">
+                        {question.type}
+                      </span>
+                      <span className="text-xs text-slate-400">
+                        第 {current + 1} / {questionList.length} 题
+                      </span>
                     </div>
-                    <div className="rounded-2xl bg-slate-50 p-3">
-                      <p className="text-xl font-bold">
-                        {isCorrect ? '100%' : '76%'}
-                      </p>
-                      <p className="mt-1 text-xs text-slate-500">正确率</p>
-                    </div>
-                  </div>
-                  <div className="mt-4 flex items-center justify-between text-xs text-slate-500">
-                    <span>已掌握 {answeredCount} 题</span>
-                    <span>
-                      待复习 {Math.max(0, questionList.length - answeredCount)}{' '}
-                      题
+                    <span className="text-xs font-semibold text-slate-400">
+                      {progress}% 完成
                     </span>
                   </div>
-                </div>
-                <div className="rounded-3xl border border-[#dbe8ff] bg-[#f0f5ff] p-5">
-                  <div className="mb-2 flex items-center gap-2 text-[#2161db]">
-                    <Sparkles size={17} />
-                    <h3 className="font-semibold">学习提醒</h3>
+                  <div className="mb-7 h-1.5 rounded-full bg-slate-100">
+                    <div
+                      className="h-full rounded-full bg-[#2161db] transition-all"
+                      style={{ width: `${Math.max(10, progress)}%` }}
+                    />
                   </div>
-                  <p className="text-sm leading-6 text-slate-600">
-                    每天完成 10 道题，连续练习比一次刷完更容易记住。
+                  <h2 className="max-w-3xl text-xl font-semibold leading-relaxed tracking-tight sm:text-2xl">
+                    {question.prompt}
+                  </h2>
+                  <p className="mb-5 mt-3 text-sm text-slate-400">
+                    {question.type === '多选题'
+                      ? '请选择所有正确答案'
+                      : '请选择一个答案'}
                   </p>
+                  <div className="space-y-3">
+                    {question.options.map((option, index) => {
+                      const letter = String.fromCharCode(65 + index);
+                      const active = selected.includes(letter);
+                      const correct =
+                        submitted && question.answer.includes(letter);
+                      return (
+                        <button
+                          key={letter}
+                          onClick={() => toggleOption(letter)}
+                          className={`flex w-full items-start gap-3 rounded-2xl border p-4 text-left transition ${correct ? 'border-emerald-300 bg-emerald-50' : active ? 'border-[#2161db] bg-[#f0f5ff] shadow-sm' : 'border-slate-200 hover:border-[#9bbcff] hover:bg-slate-50'}`}
+                        >
+                          <span
+                            className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-sm font-bold ${correct ? 'bg-emerald-500 text-white' : active ? 'bg-[#2161db] text-white' : 'bg-slate-100 text-slate-500'}`}
+                          >
+                            {correct ? <Check size={16} /> : letter}
+                          </span>
+                          <span className="pt-0.5 text-[15px] leading-6">
+                            {option}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {submitted && (
+                    <div
+                      className={`mt-6 rounded-2xl border p-4 ${isCorrect ? 'border-emerald-200 bg-emerald-50' : 'border-orange-200 bg-orange-50'}`}
+                    >
+                      <div className="flex items-center gap-2 font-semibold">
+                        {isCorrect ? (
+                          <>
+                            <Check size={18} className="text-emerald-600" />
+                            回答正确
+                          </>
+                        ) : (
+                          <>
+                            <X size={18} className="text-orange-600" />
+                            再想一想
+                          </>
+                        )}
+                        <span className="text-sm font-normal text-slate-600">
+                          正确答案：{question.answer.join('、')}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-sm leading-6 text-slate-600">
+                        {question.explanation}
+                      </p>
+                    </div>
+                  )}
+                  <div className="mt-8 flex items-center justify-between gap-3">
+                    <button
+                      onClick={() => {
+                        setCurrent(Math.max(0, current - 1));
+                        setSelected([]);
+                        setSubmitted(false);
+                      }}
+                      disabled={current === 0}
+                      className="flex items-center gap-1 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-500 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <ChevronLeft size={17} />
+                      上一题
+                    </button>
+                    {submitted ? (
+                      <button
+                        onClick={next}
+                        className="flex items-center gap-2 rounded-xl bg-[#2161db] px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-blue-200 hover:bg-[#1853c4]"
+                      >
+                        下一题
+                        <ChevronRight size={17} />
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => void submit()}
+                        disabled={!selected.length}
+                        className="rounded-xl bg-[#2161db] px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-blue-200 hover:bg-[#1853c4] disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        提交答案
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </aside>
-            </div>
+                <aside className="space-y-4">
+                  <div className="rounded-3xl border border-slate-200 bg-white p-5">
+                    <div className="mb-4 flex items-center gap-2">
+                      <BookOpen size={17} className="text-[#2161db]" />
+                      <h3 className="font-semibold">题库概览</h3>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="rounded-2xl bg-slate-50 p-3">
+                        <p className="text-xl font-bold">
+                          {questionList.length}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-500">总题数</p>
+                      </div>
+                      <div className="rounded-2xl bg-slate-50 p-3">
+                        <p className="text-xl font-bold">
+                          {isCorrect ? '100%' : '76%'}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-500">正确率</p>
+                      </div>
+                    </div>
+                    <div className="mt-4 flex items-center justify-between text-xs text-slate-500">
+                      <span>已掌握 {answeredCount} 题</span>
+                      <span>
+                        待复习{' '}
+                        {Math.max(0, questionList.length - answeredCount)} 题
+                      </span>
+                    </div>
+                  </div>
+                  <div className="rounded-3xl border border-[#dbe8ff] bg-[#f0f5ff] p-5">
+                    <div className="mb-2 flex items-center gap-2 text-[#2161db]">
+                      <Sparkles size={17} />
+                      <h3 className="font-semibold">学习提醒</h3>
+                    </div>
+                    <p className="text-sm leading-6 text-slate-600">
+                      每天完成 10 道题，连续练习比一次刷完更容易记住。
+                    </p>
+                  </div>
+                </aside>
+              </div>
+            )}
           </div>
         </section>
       </div>
