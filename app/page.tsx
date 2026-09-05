@@ -27,6 +27,7 @@ type Question = {
   answer: string[];
   explanation: string;
   category?: string;
+  last_result?: number | null;
 };
 
 const questions: Question[] = [
@@ -81,6 +82,8 @@ export default function Home() {
   const [selected, setSelected] = useState<string[]>([]);
   const [submitted, setSubmitted] = useState(false);
   const [view, setView] = useState('开始练习');
+  const [query, setQuery] = useState('');
+  const [typeFilter, setTypeFilter] = useState('全部题型');
   const [mobileNav, setMobileNav] = useState(false);
   const [showImporter, setShowImporter] = useState(false);
   const [adminPassword, setAdminPassword] = useState('');
@@ -91,6 +94,15 @@ export default function Home() {
     { id: string; prompt: string; type: string; category: string }[]
   >([]);
   const question = questionList[current] ?? questionList[0];
+  const filteredQuestions = questionList
+    .map((item, index) => ({ item, index }))
+    .filter(
+      ({ item }) =>
+        (typeFilter === '全部题型' || item.type === typeFilter) &&
+        `${item.prompt} ${item.category || ''}`
+          .toLowerCase()
+          .includes(query.trim().toLowerCase()),
+    );
   const isCorrect =
     submitted &&
     selected.length === question.answer.length &&
@@ -117,7 +129,7 @@ export default function Home() {
         if (items.length) setQuestionList(items);
       })
       .catch(() => undefined);
-  }, []);
+  }, [view]);
   useEffect(() => {
     if (view === '错题本')
       void fetch('/api/wrong')
@@ -336,7 +348,7 @@ export default function Home() {
                   {view === '错题本'
                     ? `当前有 ${wrongQuestions.length} 道待复习题目。`
                     : view === '题库'
-                      ? '选择题库后即可开始顺序或随机练习。'
+                      ? '浏览全部题目，按题型筛选，或选择一道题开始练习。'
                       : `记住上次刷到的位置，今天从第 ${current + 1} 题开始。`}
                 </p>
               </div>
@@ -390,7 +402,7 @@ export default function Home() {
                 )}
               </div>
             )}
-            {remembered && (
+            {remembered && view === '开始练习' && (
               <div className="mb-5 flex items-center justify-between rounded-xl border border-[#dbe8ff] bg-[#f0f5ff] px-4 py-3 text-sm text-[#2161db]">
                 <span>已恢复你上次的练习进度：第 {current + 1} 题</span>
                 <button
@@ -427,8 +439,30 @@ export default function Home() {
                     开始刷题
                   </button>
                 </div>
+                <div className="mb-5 grid gap-3 sm:grid-cols-[1fr_160px]">
+                  <input
+                    aria-label="搜索题目"
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    placeholder="搜索题干或分类"
+                    className="min-w-0 rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  />
+                  <select
+                    aria-label="筛选题型"
+                    value={typeFilter}
+                    onChange={(event) => setTypeFilter(event.target.value)}
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm outline-none focus:border-blue-500"
+                  >
+                    {['全部题型', '单选题', '多选题', '判断题'].map((type) => (
+                      <option key={type}>{type}</option>
+                    ))}
+                  </select>
+                </div>
+                <p className="mb-3 text-xs text-slate-500">
+                  显示 {filteredQuestions.length} / {questionList.length} 道题
+                </p>
                 <div className="divide-y divide-slate-100 rounded-2xl border border-slate-100">
-                  {questionList.map((item, index) => (
+                  {filteredQuestions.map(({ item, index }) => (
                     <button
                       key={item.id}
                       onClick={() => {
@@ -452,6 +486,15 @@ export default function Home() {
                               {item.category}
                             </span>
                           )}
+                          <span
+                            className={`text-xs ${item.last_result === 1 ? 'text-emerald-600' : item.last_result === 0 ? 'text-orange-600' : 'text-slate-400'}`}
+                          >
+                            {item.last_result === 1
+                              ? '已答对'
+                              : item.last_result === 0
+                                ? '待复习'
+                                : '未作答'}
+                          </span>
                         </span>
                         <span className="block text-[15px] leading-6 text-slate-800">
                           {item.prompt}
@@ -463,6 +506,11 @@ export default function Home() {
                       />
                     </button>
                   ))}
+                  {!filteredQuestions.length && (
+                    <p className="p-8 text-center text-sm text-slate-500">
+                      没有符合条件的题目，请调整搜索词或题型。
+                    </p>
+                  )}
                 </div>
               </div>
             ) : (

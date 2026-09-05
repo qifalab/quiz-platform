@@ -65,7 +65,7 @@ export function createApp({ dbPath = process.env.DATABASE_PATH || './data/quiz.s
   });
   app.get('/api/questions',(req,res) => {
     const bank = one('SELECT id FROM banks ORDER BY created LIMIT 1');
-    const rows = bank ? all('SELECT * FROM questions WHERE bank_id=? ORDER BY position', bank.id).map(decode) : [];
+    const rows = bank ? all('SELECT q.*, r.correct AS last_result FROM questions q LEFT JOIN results r ON r.question_id=q.id AND r.user_id=? WHERE q.bank_id=? ORDER BY q.position', req.user.id, bank.id).map(decode) : [];
     res.json(rows);
   });
   app.post('/api/progress',(req,res) => {
