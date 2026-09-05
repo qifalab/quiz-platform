@@ -134,7 +134,16 @@ export default function Home() {
     if (view === '错题本')
       void fetch('/api/wrong')
         .then((response) => (response.ok ? response.json() : []))
-        .then((items) => setWrongQuestions(items))
+        .then((items) =>
+          setWrongQuestions(
+            items as {
+              id: string;
+              prompt: string;
+              type: string;
+              category: string;
+            }[],
+          ),
+        )
         .catch(() => undefined);
   }, [view]);
 
