@@ -1,0 +1,18 @@
+services:
+  app:
+    build: .
+    image: qifa-quiz:local
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "127.0.0.1:3202:3202"
+    volumes:
+      - quiz-data:/app/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3202/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+volumes:
+  quiz-data:
