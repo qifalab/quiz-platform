@@ -8,14 +8,13 @@ import {
   ChevronRight,
   CircleHelp,
   FileSpreadsheet,
-  Flame,
   FolderOpen,
   Menu,
   RotateCcw,
-  Settings2,
   Sparkles,
   Target,
   Upload,
+  UserCircle,
   X,
 } from 'lucide-react';
 
@@ -30,46 +29,19 @@ type Question = {
   last_result?: number | null;
 };
 
-const questions: Question[] = [
-  {
-    id: 'q1',
-    type: '单选题',
-    prompt:
-      '党的二十大报告提出，必须更好发挥法治____的保障作用，在法治轨道上全面建设社会主义现代化国家。',
-    options: [
-      '固根本、稳预期、利长远',
-      '促发展、保民生、惠大众',
-      '守底线、提效率、保增长',
-      '谋发展、抓改革、促创新',
-    ],
-    answer: ['A'],
-    explanation:
-      '全面依法治国是国家治理的一场深刻革命。法治固根本、稳预期、利长远的保障作用，需要在发展中持续发挥。',
-  },
-  {
-    id: 'q2',
-    type: '多选题',
-    prompt: '下列哪些属于高质量学习计划的关键要素？',
-    options: [
-      '明确的目标',
-      '可执行的时间安排',
-      '复盘与错题整理',
-      '只在考试前集中突击',
-    ],
-    answer: ['A', 'B', 'C'],
-    explanation:
-      '清晰目标、可执行的节奏和持续复盘共同构成有效的学习闭环，临时突击难以形成稳定记忆。',
-  },
-  {
-    id: 'q3',
-    type: '判断题',
-    prompt: '错题只需要记录正确答案，不需要记录当时的错误原因。',
-    options: ['正确', '错误'],
-    answer: ['B'],
-    explanation:
-      '错题的价值在于找到错误原因。记录思路、误区和解析，才能在下一次遇到相似问题时真正避免重复犯错。',
-  },
-];
+type Bank = { id: string; name: string; total: number; answered: number; correct: number };
+
+async function apiFetch(path: string, options?: RequestInit) {
+  const response = await fetch(path, options);
+  if (response.status === 401) {
+    const data = await response.clone().json() as { code?: string };
+    if (data.code === 'LOGIN_REQUIRED') {
+      window.location.replace('/');
+      throw new Error('登录已失效，请重新登录');
+    }
+  }
+  return response;
+}
 
 const navItems = [
   { label: '开始练习', icon: Sparkles },
@@ -86,6 +58,10 @@ export default function Home() {
     'checking' | 'granted' | 'denied'
   >('checking');
   const [accessInput, setAccessInput] = useState('');
+  const [username, setUsername] = useState('');
+  const [loginBusy, setLoginBusy] = useState(false);
+  const [sessionBusy, setSessionBusy] = useState(false);
+  const [sessionMessage, setSessionMessage] = useState('');
   const [accessMessage, setAccessMessage] = useState('');
   const [query, setQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState('全部题型');
@@ -94,7 +70,13 @@ export default function Home() {
   const [adminPassword, setAdminPassword] = useState('');
   const [importMessage, setImportMessage] = useState('');
   const [remembered, setRemembered] = useState(false);
-  const [questionList, setQuestionList] = useState(questions);
+  const [questionList, setQuestionList] = useState<Question[]>([]);
+  const [banks, setBanks] = useState<Bank[]>([]);
+  const [bankId, setBankId] = useState('');
+  const [loadedBankId, setLoadedBankId] = useState('');
+  const [bankRevision, setBankRevision] = useState(0);
+  const [loadError, setLoadError] = useState('');
+  const [saving, setSaving] = useState(false);
   const [wrongQuestions, setWrongQuestions] = useState<
     { id: string; prompt: string; type: string; category: string }[]
   >([]);
@@ -109,88 +91,120 @@ export default function Home() {
           .includes(query.trim().toLowerCase()),
     );
   const isCorrect =
-    submitted &&
+    submitted && !!question &&
     selected.length === question.answer.length &&
     selected.every((item) => question.answer.includes(item));
-  const answeredCount = current + (submitted ? 1 : 0);
-  const progress = Math.round((answeredCount / questionList.length) * 100);
+  const answeredCount = questionList.filter(item => item.last_result != null).length;
+  const correctCount = questionList.filter(item => item.last_result === 1).length;
+  const progress = questionList.length ? Math.round((answeredCount / questionList.length) * 100) : 0;
+  const currentBank = banks.find(bank => bank.id === bankId);
 
-  async function enterPlatform(token: string) {
+
+  async function enterPlatform() {
+    setLoginBusy(true);
     setAccessMessage('');
-    const response = await fetch(
-      `/api/access?token=${encodeURIComponent(token)}`,
-      { credentials: 'include' },
-    );
-    if (!response.ok) {
+    try {
+      const response = await fetch('/api/access/login', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ username, password: accessInput }),
+      });
+      const data = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(data.error || '登录失败');
+      setAccessInput('');
+      setAccessState('granted');
+      setView('开始练习');
+    } catch (error) {
       setAccessState('denied');
-      setAccessMessage('token 不正确或已失效');
-      return false;
-    }
-    setAccessState('granted');
-    const cleanUrl = new URL(window.location.href);
-    cleanUrl.searchParams.delete('token');
-    window.history.replaceState(
-      {},
-      '',
-      `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`,
-    );
-    return true;
+      setAccessMessage(error instanceof Error ? error.message : '网络异常，请重试');
+    } finally { setLoginBusy(false); }
+  }
+
+  async function logout(otherDevices: boolean) {
+    setSessionBusy(true);
+    setSessionMessage('');
+    try {
+      const response = await apiFetch(`/api/access/${otherDevices ? 'logout-others' : 'logout'}`, { method: 'POST' });
+      if (!response.ok) throw new Error('退出失败，请重试');
+      if (otherDevices) {
+        setSessionMessage('已退出其他设备，当前设备保持登录。');
+      } else {
+        window.location.replace('/');
+      }
+    } catch (error) {
+      setSessionMessage(error instanceof Error ? error.message : '网络异常，请重试');
+    } finally { setSessionBusy(false); }
   }
 
   useEffect(() => {
-    const token = new URL(window.location.href).searchParams.get('token');
-    const request = token
-      ? enterPlatform(token)
-      : fetch('/api/access', { credentials: 'include' }).then((response) => {
-          if (!response.ok) throw new Error('unauthorized');
-          setAccessState('granted');
-          return true;
-        });
-    void request.catch(() => {
-      setAccessState('denied');
-      setAccessMessage('请输入访问 token');
-    });
+    const cleanUrl = new URL(window.location.href);
+    if (cleanUrl.searchParams.has('token')) {
+      cleanUrl.searchParams.delete('token');
+      window.history.replaceState({}, '', `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`);
+    }
+    void fetch('/api/access').then(async response => {
+      if (!response.ok) { setAccessState('denied'); return; }
+      const data = await response.json() as { username: string };
+      setUsername(data.username);
+      setAccessState('granted');
+    }).catch(() => { setAccessState('denied'); setAccessMessage('无法连接服务，请重试'); });
   }, []);
 
   useEffect(() => {
-    const saved = Number(window.localStorage.getItem('qifa-quiz-current') || 0);
-    if (saved > 0 && saved < questionList.length) {
-      setCurrent(saved);
-      setRemembered(true);
-    }
-  }, [questionList.length]);
+    if (accessState !== 'granted') return;
+    const controller = new AbortController();
+    void apiFetch('/api/state', { signal: controller.signal }).then(async response => {
+      if (!response.ok) throw new Error('题库加载失败');
+      return await response.json() as { banks: Bank[] };
+    }).then(data => {
+      if (controller.signal.aborted) return;
+      setBanks(data.banks);
+      setBankId(currentBank => data.banks.some(bank => bank.id === currentBank) ? currentBank : data.banks[0]?.id || '');
+    }).catch(error => { if (!controller.signal.aborted) setLoadError(error.message); });
+    return () => controller.abort();
+  }, [accessState, bankRevision]);
+
   useEffect(() => {
-    window.localStorage.setItem('qifa-quiz-current', String(current));
-  }, [current]);
+    if (accessState !== 'granted' || !bankId) return;
+    const controller = new AbortController();
+    void apiFetch(`/api/questions?bankId=${encodeURIComponent(bankId)}`, { signal: controller.signal })
+      .then(async response => {
+        if (!response.ok) throw new Error('题目加载失败，请重试');
+        return await response.json() as Question[];
+      }).then(items => {
+        if (controller.signal.aborted) return;
+        setQuestionList(items);
+        let saved = 0;
+        try { saved = Number(window.localStorage.getItem(`qifa-quiz-current:${username}:${bankId}`) || 0); } catch { /* storage may be disabled */ }
+        const position = Number.isInteger(saved) && saved >= 0 && saved < items.length ? saved : 0;
+        setCurrent(position);
+        setSelected([]);
+        setSubmitted(false);
+        setRemembered(position > 0);
+        setLoadedBankId(bankId);
+        setLoadError('');
+      }).catch(error => { if (!controller.signal.aborted) setLoadError(error.message); });
+    return () => controller.abort();
+  }, [bankId, accessState, username]);
+
   useEffect(() => {
-    void fetch('/api/questions')
-      .then((response) =>
-        response.ok ? (response.json() as Promise<Question[]>) : [],
-      )
-      .then((items) => {
-        if (items.length) setQuestionList(items);
-      })
-      .catch(() => undefined);
-  }, [view, accessState]);
+    if (!bankId || bankId !== loadedBankId || accessState !== 'granted') return;
+    try { window.localStorage.setItem(`qifa-quiz-current:${username}:${bankId}`, String(current)); } catch { /* storage may be disabled */ }
+  }, [current, bankId, loadedBankId, username, accessState]);
+
   useEffect(() => {
-    if (accessState === 'granted' && view === '错题本')
-      void fetch('/api/wrong')
-        .then((response) => (response.ok ? response.json() : []))
-        .then((items) =>
-          setWrongQuestions(
-            items as {
-              id: string;
-              prompt: string;
-              type: string;
-              category: string;
-            }[],
-          ),
-        )
-        .catch(() => undefined);
-  }, [view, accessState]);
+    if (accessState !== 'granted' || view !== '错题本' || !bankId) return;
+    const controller = new AbortController();
+    void apiFetch(`/api/wrong?bankId=${encodeURIComponent(bankId)}`, { signal: controller.signal })
+      .then(async response => {
+        if (!response.ok) throw new Error('错题加载失败');
+        return await response.json() as { id: string; prompt: string; type: string; category: string }[];
+      }).then(items => { if (!controller.signal.aborted) setWrongQuestions(items); })
+      .catch(error => { if (!controller.signal.aborted) setLoadError(error.message); });
+    return () => controller.abort();
+  }, [view, accessState, bankId]);
 
   function toggleOption(option: string) {
-    if (submitted) return;
+    if (submitted || saving || !question) return;
     if (question.type !== '多选题') {
       setSelected([option]);
       return;
@@ -208,19 +222,20 @@ export default function Home() {
   }
 
   async function submit() {
-    if (!selected.length) return;
-    setSubmitted(true);
-    void fetch('/api/progress', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        questionId: question.id,
-        selected,
-        correct:
-          selected.length === question.answer.length &&
-          selected.every((item) => question.answer.includes(item)),
-      }),
-    }).catch(() => undefined);
+    if (!selected.length || !question || saving) return;
+    setSaving(true);
+    try {
+      const response = await apiFetch('/api/progress', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ questionId: question.id, selected }),
+      });
+      if (!response.ok) throw new Error('答案保存失败，请重试');
+      const data = await response.json() as { correct: boolean };
+      setQuestionList(items => items.map(item => item.id === question.id ? { ...item, last_result: Number(data.correct) } : item));
+      setSubmitted(true);
+      setLoadError('');
+    } catch (error) { setLoadError(error instanceof Error ? error.message : '保存失败'); }
+    finally { setSaving(false); }
   }
 
   async function importWorkbook(file: File) {
@@ -228,7 +243,7 @@ export default function Home() {
       setImportMessage('请输入题库管理密码');
       return;
     }
-    const login = await fetch('/api/admin/login', {
+    const login = await apiFetch('/api/admin/login', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ password: adminPassword }),
@@ -241,7 +256,7 @@ export default function Home() {
     }
     const form = new FormData();
     form.append('file', file);
-    const previewResponse = await fetch('/api/admin/preview', {
+    const previewResponse = await apiFetch('/api/admin/preview', {
       method: 'POST',
       body: form,
     });
@@ -256,7 +271,7 @@ export default function Home() {
       );
       return;
     }
-    const bankResponse = await fetch('/api/admin/banks', {
+    const bankResponse = await apiFetch('/api/admin/banks', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -274,6 +289,9 @@ export default function Home() {
     setImportMessage(
       `已导入 ${preview.questions.length} 道题目${preview.errors?.length ? `，${preview.errors.length} 行未导入` : ''}`,
     );
+    const imported = await bankResponse.json() as { id: string };
+    setBankRevision(value => value + 1);
+    setBankId(imported.id);
     setShowImporter(false);
   }
 
@@ -287,35 +305,42 @@ export default function Home() {
             </div>
             <div>
               <p className="font-bold">Qifa Quiz</p>
-              <p className="text-xs text-slate-500">访问验证</p>
+              <p className="text-xs text-slate-500">账号登录</p>
             </div>
           </div>
           <h1 className="text-2xl font-bold tracking-tight">
-            请输入访问 token
+            账号密码登录
           </h1>
           <p className="mt-2 text-sm leading-6 text-slate-500">
-            该平台仅对持有访问链接的用户开放。
+            登录后可选择题库练习，并在用户中心管理登录设备。
           </p>
           <form
             className="mt-6 space-y-3"
             onSubmit={(event) => {
               event.preventDefault();
-              void enterPlatform(accessInput);
+              void enterPlatform();
             }}
           >
             <input
-              autoFocus
+              aria-label="账号" autoComplete="username" required
+              value={username} onChange={event => setUsername(event.target.value)}
+              placeholder="账号"
+              className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[#2161db]"
+            />
+            <input
+              aria-label="密码" autoComplete="current-password" required
               type="password"
               value={accessInput}
               onChange={(event) => setAccessInput(event.target.value)}
-              placeholder="访问 token"
+              placeholder="密码"
               className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-[#2161db] focus:ring-2 focus:ring-blue-100"
             />
             <button
               type="submit"
+              disabled={loginBusy || accessState === 'checking'}
               className="w-full rounded-xl bg-[#2161db] px-4 py-3 text-sm font-semibold text-white hover:bg-[#1853c4]"
             >
-              进入平台
+              {accessState === 'checking' ? '检查登录状态…' : loginBusy ? '正在登录…' : '登录'}
             </button>
           </form>
           {accessMessage && (
@@ -355,13 +380,12 @@ export default function Home() {
           </div>
           <button
             onClick={() => {
-              setImportMessage('设置入口已打开');
-              setShowImporter(true);
+              setView('用户中心');
             }}
             className="flex items-center gap-2 rounded-full border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50"
           >
-            <Settings2 size={16} />
-            <span className="hidden sm:inline">设置</span>
+            <UserCircle size={16} />
+            <span className="hidden sm:inline">用户中心</span>
           </button>
         </div>
       </header>
@@ -400,7 +424,7 @@ export default function Home() {
                 className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-slate-600 hover:bg-slate-50"
               >
                 <FolderOpen size={17} />
-                理论知识题库
+                {currentBank?.name || '选择题库'}
               </button>
               <button
                 onClick={() => {
@@ -416,7 +440,7 @@ export default function Home() {
             <div className="mt-10 rounded-2xl bg-[#f2f6ff] p-4">
               <div className="mb-3 flex items-center justify-between">
                 <span className="text-xs font-semibold text-slate-600">
-                  本周进度
+                  当前题库进度
                 </span>
                 <Target size={16} className="text-[#2161db]" />
               </div>
@@ -427,7 +451,7 @@ export default function Home() {
                 />
               </div>
               <p className="text-xs text-slate-500">
-                已完成 {answeredCount} / {questions.length} 道题
+                已完成 {answeredCount} / {questionList.length} 道题
               </p>
             </div>
           </div>
@@ -437,27 +461,41 @@ export default function Home() {
             <div className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
               <div>
                 <p className="mb-2 text-sm font-semibold text-[#2161db]">
-                  理论知识题库 · {view}
+                  {view === '用户中心' ? username : currentBank?.name || '选择题库'} · {view}
                 </p>
                 <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-                  {view === '错题本'
+                  {view === '用户中心' ? '用户中心' : view === '错题本'
                     ? '复习你的错题'
                     : view === '题库'
                       ? '我的题库'
                       : '继续你的练习'}
                 </h1>
                 <p className="mt-2 text-sm text-slate-500">
-                  {view === '错题本'
+                  {view === '用户中心' ? '管理账号与登录设备。' : view === '错题本'
                     ? `当前有 ${wrongQuestions.length} 道待复习题目。`
                     : view === '题库'
                       ? '浏览全部题目，按题型筛选，或选择一道题开始练习。'
                       : `记住上次刷到的位置，今天从第 ${current + 1} 题开始。`}
                 </p>
               </div>
-              <div className="flex items-center gap-2 text-sm text-slate-500">
-                <Flame size={17} className="text-orange-500" />
-                连续学习 3 天
-              </div>
+              {view !== '用户中心' && banks.length > 0 && (
+                <label className="flex items-center gap-2 text-sm text-slate-500">
+                  <span className="whitespace-nowrap">当前题库</span>
+                  <select
+                    aria-label="选择题库"
+                    value={bankId}
+                    onChange={(event) => { setBankId(event.target.value); setWrongQuestions([]); setLoadError(''); }}
+                    disabled={saving}
+                    className="max-w-[220px] rounded-xl border border-slate-200 bg-white px-3 py-2.5 font-medium text-slate-700 outline-none focus:border-blue-500"
+                  >
+                    {banks.map((bank) => (
+                      <option key={bank.id} value={bank.id}>
+                        {bank.name}（{bank.total}题）
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
             </div>
             {view === '错题本' && (
               <div className="mb-6 rounded-2xl border border-orange-100 bg-orange-50 p-4">
@@ -518,7 +556,22 @@ export default function Home() {
                 </button>
               </div>
             )}
-            {view === '题库' ? (
+            {loadError && <p role="alert" className="mb-4 rounded-xl bg-rose-50 p-3 text-sm text-rose-700">{loadError}</p>}
+            {view === '用户中心' ? (
+              <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+                <h2 className="text-xl font-bold">账号：{username}</h2>
+                <p className="mt-2 text-sm text-slate-500">退出其他设备后，当前设备可以继续使用。</p>
+                <div className="mt-6 flex flex-wrap gap-3">
+                  <button disabled={sessionBusy} onClick={() => void logout(true)} className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold hover:bg-slate-50 disabled:opacity-50">退出其他设备</button>
+                  <button disabled={sessionBusy} onClick={() => void logout(false)} className="rounded-xl bg-rose-600 px-5 py-3 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50">退出登录</button>
+                </div>
+                {sessionMessage && <p role="status" className="mt-4 text-sm text-slate-600">{sessionMessage}</p>}
+              </div>
+            ) : bankId && loadedBankId !== bankId ? (
+              <p className="rounded-2xl bg-white p-8 text-slate-500">正在加载题库…</p>
+            ) : !question ? (
+              <p className="rounded-2xl bg-white p-8 text-slate-500">暂无题目，请导入题库。</p>
+            ) : view === '题库' ? (
               <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-[0_12px_35px_rgba(31,63,114,0.06)] sm:p-8">
                 <div className="mb-5 flex items-center justify-between gap-3">
                   <div>
@@ -701,7 +754,7 @@ export default function Home() {
                         setSelected([]);
                         setSubmitted(false);
                       }}
-                      disabled={current === 0}
+                      disabled={current === 0 || saving}
                       className="flex items-center gap-1 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-500 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       <ChevronLeft size={17} />
@@ -718,7 +771,7 @@ export default function Home() {
                     ) : (
                       <button
                         onClick={() => void submit()}
-                        disabled={!selected.length}
+                        disabled={!selected.length || saving}
                         className="rounded-xl bg-[#2161db] px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-blue-200 hover:bg-[#1853c4] disabled:cursor-not-allowed disabled:opacity-40"
                       >
                         提交答案
@@ -741,16 +794,16 @@ export default function Home() {
                       </div>
                       <div className="rounded-2xl bg-slate-50 p-3">
                         <p className="text-xl font-bold">
-                          {isCorrect ? '100%' : '76%'}
+                          {answeredCount ? `${Math.round(correctCount / answeredCount * 100)}%` : '—'}
                         </p>
                         <p className="mt-1 text-xs text-slate-500">正确率</p>
                       </div>
                     </div>
                     <div className="mt-4 flex items-center justify-between text-xs text-slate-500">
-                      <span>已掌握 {answeredCount} 题</span>
+                      <span>已掌握 {correctCount} 题</span>
                       <span>
                         待复习{' '}
-                        {Math.max(0, questionList.length - answeredCount)} 题
+                        {answeredCount - correctCount} 题
                       </span>
                     </div>
                   </div>
@@ -811,7 +864,8 @@ export default function Home() {
                 className="hidden"
                 onChange={(event) => {
                   const file = event.target.files?.[0];
-                  if (file) void importWorkbook(file);
+                  if (file) void importWorkbook(file).catch(() => setImportMessage('导入失败，请检查网络后重试'));
+                  event.target.value = '';
                 }}
               />
             </label>

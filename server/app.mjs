@@ -24,20 +24,24 @@ const decode = (q) => ({
 export function createApp({
   dbPath = process.env.DATABASE_PATH || './data/quiz.sqlite',
   adminPassword = process.env.ADMIN_PASSWORD,
-  accessToken = process.env.ACCESS_TOKEN,
+  accessUsername = process.env.ACCESS_USERNAME || 'admin',
+  accessPassword = process.env.ACCESS_PASSWORD,
   origin = process.env.APP_ORIGIN || 'http://localhost:3202',
   staticDir = resolve('dist-web'),
 } = {}) {
   if (!adminPassword || adminPassword.length < 12)
     throw new Error('ADMIN_PASSWORD must have at least 12 characters');
-  if (!accessToken || accessToken.length < 24)
-    throw new Error('ACCESS_TOKEN must have at least 24 characters');
+  if (!accessPassword || accessPassword.length < 12)
+    throw new Error('ACCESS_PASSWORD must have at least 12 characters');
   mkdirSync(dirname(dbPath), { recursive: true });
   const db = new DatabaseSync(dbPath);
   db.exec(`PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;
     CREATE TABLE IF NOT EXISTS banks(id TEXT PRIMARY KEY, name TEXT NOT NULL, created INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS questions(id TEXT PRIMARY KEY, bank_id TEXT REFERENCES banks(id) ON DELETE CASCADE, type TEXT NOT NULL, prompt TEXT NOT NULL, options TEXT NOT NULL, answer TEXT NOT NULL, explanation TEXT NOT NULL, category TEXT NOT NULL, difficulty TEXT NOT NULL, position INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS visitors(id TEXT PRIMARY KEY, token_hash TEXT UNIQUE, created INTEGER, admin_until INTEGER DEFAULT 0);
+    CREATE TABLE IF NOT EXISTS accounts(username TEXT PRIMARY KEY, visitor_id TEXT NOT NULL UNIQUE REFERENCES visitors(id));
+    CREATE TABLE IF NOT EXISTS login_sessions(token_hash TEXT PRIMARY KEY, username TEXT NOT NULL REFERENCES accounts(username), created INTEGER NOT NULL, expires INTEGER NOT NULL, credential_hash TEXT NOT NULL, admin_until INTEGER NOT NULL DEFAULT 0);
+    CREATE INDEX IF NOT EXISTS login_sessions_account ON login_sessions(username);
     CREATE TABLE IF NOT EXISTS attempts(id TEXT PRIMARY KEY, user_id TEXT REFERENCES visitors(id), question_id TEXT REFERENCES questions(id) ON DELETE CASCADE, selected TEXT NOT NULL, correct INTEGER NOT NULL, created INTEGER NOT NULL);
     CREATE INDEX IF NOT EXISTS attempts_user ON attempts(user_id,created);
     CREATE TABLE IF NOT EXISTS results(user_id TEXT REFERENCES visitors(id), question_id TEXT REFERENCES questions(id) ON DELETE CASCADE, correct INTEGER NOT NULL, updated INTEGER NOT NULL, PRIMARY KEY(user_id,question_id));
@@ -61,25 +65,17 @@ export function createApp({
     }
   };
   const accessCookie = 'qifa_access';
-  const validAccessToken = (value) => {
-    if (!value) return false;
-    const supplied = Buffer.from(hash(String(value)));
-    const expected = Buffer.from(hash(accessToken));
-    return (
-      supplied.length === expected.length && timingSafeEqual(supplied, expected)
-    );
+  const sessionLifetime = 30 * 24 * 3600000;
+  const credentialHash = hash(JSON.stringify([accessUsername, accessPassword]));
+  const cookieValue = (req, name) => req.headers.cookie?.split(';').map(part => part.trim()).find(part => part.startsWith(`${name}=`))?.slice(name.length + 1);
+  const setSessionCookie = (res, token, maxAge = sessionLifetime / 1000) => {
+    res.append('Set-Cookie', `${accessCookie}=${token}; Max-Age=${maxAge}; Path=/; HttpOnly; SameSite=Lax${origin.startsWith('https:') ? '; Secure' : ''}`);
   };
-  const grantAccess = (req, res) => {
-    const cookie = req.headers.cookie?.match(
-      new RegExp(`(?:^|;\\s*)${accessCookie}=([^;]+)`),
-    )?.[1];
-    const presented = req.query?.token || req.headers['x-access-token'];
-    if (cookie !== '1' && !validAccessToken(presented)) return false;
-    res.set(
-      'Set-Cookie',
-      `${accessCookie}=1; Max-Age=2592000; Path=/; HttpOnly; SameSite=Lax${origin.startsWith('https:') ? '; Secure' : ''}`,
-    );
-    return true;
+  const readSession = req => {
+    const token = cookieValue(req, accessCookie);
+    if (!/^[a-f0-9]{64}$/.test(token || '')) return null;
+    return one(`SELECT s.*, a.visitor_id FROM login_sessions s JOIN accounts a ON a.username=s.username
+      WHERE s.token_hash=? AND s.username=? AND s.expires>? AND s.credential_hash=?`, hash(token), accessUsername, Date.now(), credentialHash);
   };
   function addBank(name, questions) {
     const bankId = randomUUID();
@@ -145,43 +141,50 @@ export function createApp({
     one('SELECT 1');
     res.json({ status: 'ok', version: '1.0.0' });
   });
+  app.post('/api/access/login', rateLimit({ windowMs: 900000, limit: 10, standardHeaders: true, legacyHeaders: false, message: { error: '尝试次数过多，请 15 分钟后重试' } }), (req, res) => {
+    const username = String(req.body?.username || '');
+    const password = String(req.body?.password || '');
+    if (!timingSafeEqual(Buffer.from(hash(username)), Buffer.from(hash(accessUsername))) || !timingSafeEqual(Buffer.from(hash(password)), Buffer.from(hash(accessPassword))))
+      return res.status(401).json({ error: '账号或密码不正确' });
+    const token = randomBytes(32).toString('hex');
+    transact(() => {
+      let account = one('SELECT * FROM accounts WHERE username=?', username);
+      if (!account) {
+        // Adopt this browser's old progress only on the account's first login.
+        const legacyToken = cookieValue(req, 'quiz_session');
+        const visitor = /^[a-f0-9]{64}$/.test(legacyToken || '')
+          ? one('SELECT id FROM visitors WHERE token_hash=? AND id NOT IN (SELECT visitor_id FROM accounts)', hash(legacyToken)) : null;
+        const visitorId = visitor?.id || randomUUID();
+        if (!visitor) run('INSERT INTO visitors(id,token_hash,created) VALUES(?,?,?)', visitorId, hash(randomBytes(32)), Date.now());
+        run('INSERT INTO accounts(username,visitor_id) VALUES(?,?)', username, visitorId);
+        account = { visitor_id: visitorId };
+      }
+      const previous = readSession(req);
+      if (previous) run('DELETE FROM login_sessions WHERE token_hash=?', previous.token_hash);
+      run('DELETE FROM login_sessions WHERE expires<=? OR (username=? AND credential_hash<>?)', Date.now(), username, credentialHash);
+      run('INSERT INTO login_sessions(token_hash,username,created,expires,credential_hash) VALUES(?,?,?,?,?)', hash(token), username, Date.now(), Date.now() + sessionLifetime, credentialHash);
+    });
+    setSessionCookie(res, token);
+    res.json({ ok: true, username });
+  });
+  app.use('/api', (req, res, next) => {
+    const session = readSession(req);
+    if (!session) return res.status(401).json({ error: '请先登录', code: 'LOGIN_REQUIRED' });
+    req.authSession = session;
+    req.user = { id: session.visitor_id, admin_until: session.admin_until };
+    next();
+  });
   app.get('/api/access', (req, res) => {
-    if (!grantAccess(req, res))
-      return res.status(401).json({ error: '需要访问 token' });
+    res.json({ ok: true, username: req.authSession.username });
+  });
+  app.post('/api/access/logout', (req, res) => {
+    run('DELETE FROM login_sessions WHERE token_hash=?', req.authSession.token_hash);
+    setSessionCookie(res, '', 0);
     res.json({ ok: true });
   });
-  app.use('/api', (req, res, next) => {
-    if (req.path === '/health' || req.path === '/access') return next();
-    if (
-      !grantAccess(req, res) &&
-      !req.headers.cookie?.includes(`${accessCookie}=1`)
-    )
-      return res.status(401).json({ error: '需要访问 token' });
-    next();
-  });
-  app.use('/api', (req, res, next) => {
-    const token = req.headers.cookie?.match(
-      /(?:^|;\s*)quiz_session=([a-f0-9]{64})(?:;|$)/,
-    )?.[1];
-    let user = token
-      ? one('SELECT * FROM visitors WHERE token_hash=?', hash(token))
-      : null;
-    if (!user) {
-      const newToken = randomBytes(32).toString('hex');
-      user = { id: randomUUID(), admin_until: 0 };
-      run(
-        'INSERT INTO visitors(id,token_hash,created) VALUES(?,?,?)',
-        user.id,
-        hash(newToken),
-        Date.now(),
-      );
-      res.set(
-        'Set-Cookie',
-        `quiz_session=${newToken}; Max-Age=31536000; Path=/; HttpOnly; SameSite=Lax${origin.startsWith('https:') ? '; Secure' : ''}`,
-      );
-    }
-    req.user = user;
-    next();
+  app.post('/api/access/logout-others', (req, res) => {
+    const result = run('DELETE FROM login_sessions WHERE username=? AND token_hash<>?', req.authSession.username, req.authSession.token_hash);
+    res.json({ ok: true, revoked: result.changes });
   });
   const admin = (req, res, next) => {
     if (req.user.admin_until < Date.now())
@@ -207,15 +210,15 @@ export function createApp({
       )
         throw fail('管理密码不正确', 401);
       run(
-        'UPDATE visitors SET admin_until=? WHERE id=?',
+        'UPDATE login_sessions SET admin_until=? WHERE token_hash=?',
         Date.now() + 8 * 3600000,
-        req.user.id,
+        req.authSession.token_hash,
       );
       res.json({ ok: true });
     },
   );
   app.post('/api/admin/logout', (req, res) => {
-    run('UPDATE visitors SET admin_until=0 WHERE id=?', req.user.id);
+    run('UPDATE login_sessions SET admin_until=0 WHERE token_hash=?', req.authSession.token_hash);
     res.json({ ok: true });
   });
   app.get('/api/state', (req, res) => {
@@ -259,7 +262,10 @@ export function createApp({
     });
   });
   app.get('/api/questions', (req, res) => {
-    const bank = one('SELECT id FROM banks ORDER BY created LIMIT 1');
+    const requestedBankId = String(req.query.bankId || '');
+    const bank = requestedBankId
+      ? one('SELECT id FROM banks WHERE id=?', requestedBankId)
+      : one('SELECT id FROM banks ORDER BY created LIMIT 1');
     const rows = bank
       ? all(
           'SELECT q.*, r.correct AS last_result FROM questions q LEFT JOIN results r ON r.question_id=q.id AND r.user_id=? WHERE q.bank_id=? ORDER BY q.position',
@@ -306,12 +312,11 @@ export function createApp({
     });
   });
   app.get('/api/wrong', (req, res) => {
-    res.json(
-      all(
-        `SELECT q.id,q.bank_id,q.prompt,q.type,q.category,b.name bank_name FROM results r JOIN questions q ON q.id=r.question_id JOIN banks b ON b.id=q.bank_id WHERE r.user_id=? AND r.correct=0 ORDER BY r.updated DESC`,
-        req.user.id,
-      ),
-    );
+    const bankId = String(req.query.bankId || '');
+    res.json(all(
+      `SELECT q.id,q.bank_id,q.prompt,q.type,q.category,b.name bank_name FROM results r JOIN questions q ON q.id=r.question_id JOIN banks b ON b.id=q.bank_id WHERE r.user_id=? AND r.correct=0 ${bankId ? 'AND q.bank_id=?' : ''} ORDER BY r.updated DESC`,
+      ...(bankId ? [req.user.id, bankId] : [req.user.id]),
+    ));
   });
   function practiceData(req, id) {
     const p = one(
