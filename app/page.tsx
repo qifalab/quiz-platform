@@ -241,6 +241,10 @@ export default function Home() {
 
   async function deleteBank(id: string) {
     if (!window.confirm('删除题库后题目和进度不可恢复，确定删除吗？')) return;
+    const password = window.prompt('请输入题库管理密码');
+    if (!password) return;
+    const login = await apiFetch('/api/admin/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ password }) });
+    if (!login.ok) { setLoadError(((await login.json()) as { error?: string }).error || '管理密码不正确'); return; }
     const response = await apiFetch(`/api/admin/banks/${id}`, { method: 'DELETE' });
     if (!response.ok) { setLoadError('删除题库失败，请先登录管理权限'); return; }
     setBankRevision(v => v + 1);
