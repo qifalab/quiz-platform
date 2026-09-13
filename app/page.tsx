@@ -16,6 +16,8 @@ import {
   Upload,
   UserCircle,
   X,
+  Trash2,
+  Star,
 } from 'lucide-react';
 
 type Question = {
@@ -76,6 +78,9 @@ export default function Home() {
   const [loadedBankId, setLoadedBankId] = useState('');
   const [bankRevision, setBankRevision] = useState(0);
   const [loadError, setLoadError] = useState('');
+  const [favorites, setFavorites] = useState<string[]>([]);
+  const [showAnswerCard, setShowAnswerCard] = useState(false);
+  const [finishMessage, setFinishMessage] = useState('');
   const [saving, setSaving] = useState(false);
   const [wrongQuestions, setWrongQuestions] = useState<
     { id: string; prompt: string; type: string; category: string }[]
@@ -192,6 +197,18 @@ export default function Home() {
   }, [current, bankId, loadedBankId, username, accessState]);
 
   useEffect(() => {
+    if (!username || !bankId) return;
+    try { setFavorites(JSON.parse(localStorage.getItem(`qifa-quiz-favorites:${username}:${bankId}`) || '[]')); } catch { setFavorites([]); }
+  }, [username, bankId]);
+
+  function toggleFavorite() {
+    if (!question) return;
+    const next = favorites.includes(question.id) ? favorites.filter(id => id !== question.id) : [...favorites, question.id];
+    setFavorites(next);
+    try { localStorage.setItem(`qifa-quiz-favorites:${username}:${bankId}`, JSON.stringify(next)); } catch {}
+  }
+
+  useEffect(() => {
     if (accessState !== 'granted' || view !== '错题本' || !bankId) return;
     const controller = new AbortController();
     void apiFetch(`/api/wrong?bankId=${encodeURIComponent(bankId)}`, { signal: controller.signal })
@@ -216,9 +233,18 @@ export default function Home() {
     );
   }
   function next() {
-    setCurrent((value) => (value >= questionList.length - 1 ? 0 : value + 1));
+    if (current >= questionList.length - 1) { setFinishMessage('本轮练习已完成，可以查看答题卡或重新开始。'); return; }
+    setCurrent((value) => value + 1);
     setSelected([]);
     setSubmitted(false);
+  }
+
+  async function deleteBank(id: string) {
+    if (!window.confirm('删除题库后题目和进度不可恢复，确定删除吗？')) return;
+    const response = await apiFetch(`/api/admin/banks/${id}`, { method: 'DELETE' });
+    if (!response.ok) { setLoadError('删除题库失败，请先登录管理权限'); return; }
+    setBankRevision(v => v + 1);
+    if (bankId === id) { setBankId(''); setQuestionList([]); }
   }
 
   async function submit() {
@@ -616,6 +642,9 @@ export default function Home() {
                 <p className="mb-3 text-xs text-slate-500">
                   显示 {filteredQuestions.length} / {questionList.length} 道题
                 </p>
+                <div className="mb-4 flex flex-wrap gap-2">
+                  {banks.map(bank => <button key={bank.id} onClick={() => void deleteBank(bank.id)} className="inline-flex items-center gap-1 rounded-lg border border-rose-100 px-2.5 py-1.5 text-xs text-rose-600 hover:bg-rose-50"><Trash2 size={13}/>删除“{bank.name}”</button>)}
+                </div>
                 <div className="divide-y divide-slate-100 rounded-2xl border border-slate-100">
                   {filteredQuestions.map(({ item, index }) => (
                     <button
@@ -680,9 +709,7 @@ export default function Home() {
                         第 {current + 1} / {questionList.length} 题
                       </span>
                     </div>
-                    <span className="text-xs font-semibold text-slate-400">
-                      {progress}% 完成
-                    </span>
+                    <div className="flex items-center gap-3"><button aria-label={favorites.includes(question.id) ? '取消收藏' : '收藏题目'} onClick={toggleFavorite} className="text-amber-500"><Star size={19} fill={favorites.includes(question.id) ? 'currentColor' : 'none'} /></button><button onClick={() => setShowAnswerCard(true)} className="text-xs font-semibold text-slate-500 hover:text-[#2161db]">答题卡</button><span className="text-xs font-semibold text-slate-400">{progress}% 完成</span></div>
                   </div>
                   <div className="mb-7 h-1.5 rounded-full bg-slate-100">
                     <div
@@ -778,6 +805,7 @@ export default function Home() {
                       </button>
                     )}
                   </div>
+                  {finishMessage && <p role="status" className="mt-4 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-700">{finishMessage}</p>}
                 </div>
                 <aside className="space-y-4">
                   <div className="rounded-3xl border border-slate-200 bg-white p-5">
@@ -886,6 +914,7 @@ export default function Home() {
           </dialog>
         </div>
       )}
+      {showAnswerCard && <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/30 p-4" onClick={() => setShowAnswerCard(false)}><div role="dialog" aria-label="答题卡" className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl" onClick={e => e.stopPropagation()}><div className="mb-4 flex items-center justify-between"><h2 className="text-lg font-bold">答题卡</h2><button aria-label="关闭" onClick={() => setShowAnswerCard(false)}><X size={18}/></button></div><div className="grid grid-cols-6 gap-2 sm:grid-cols-8">{questionList.map((item, index) => <button key={item.id} onClick={() => { setCurrent(index); setSelected([]); setSubmitted(false); setShowAnswerCard(false); setFinishMessage(''); }} className={`h-9 rounded-lg text-sm font-semibold ${index === current ? 'bg-[#2161db] text-white' : item.last_result === 1 ? 'bg-emerald-100 text-emerald-700' : item.last_result === 0 ? 'bg-orange-100 text-orange-700' : 'bg-slate-100 text-slate-600'}`}>{index + 1}</button>)}</div><p className="mt-4 text-xs text-slate-500">蓝色为当前题，绿色已答对，橙色待复习。</p></div></div>}
     </main>
   );
 }
