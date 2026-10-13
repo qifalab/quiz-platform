@@ -907,7 +907,7 @@ export default function Home() {
               </p>
             )}
             <div className="mt-4 rounded-xl bg-slate-50 p-3 text-xs leading-5 text-slate-500">
-              建议列：题目、题型、选项、答案、解析、分类。
+              模板列：类型编号、题干、标签、学科（非必要）、客观题答案、选项 A-D。
               <a
                 className="ml-1 font-semibold text-[#2161db]"
                 href="/api/template"
